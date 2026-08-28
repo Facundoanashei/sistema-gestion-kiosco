@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiosco Facu - Sistema POS</title>
+    <style>
+        :root {
+            --primary: #003057;
+            --secondary: #6c757d;
+            --success: #28a745;
+            --danger: #dc3545;
+            --light: #f8f9fa;
+            --dark: #343a40;
+            --warning: #ffc107;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            background-color: #e9ecef;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .navbar {
+            background: var(--primary);
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+
+        .nav-controls span { cursor: pointer; margin-left: 15px; font-size: 1.2rem; }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            gap: 10px;
+            padding: 10px;
+        }
+
+        .inventory-section {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .cart-section {
+            flex: 1.2;
+            background: white;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #eee;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+        }
+
+        table { width: 100%; border-collapse: collapse; background: white; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        tr:hover { background-color: #f1f1f1; }
+
+        .cart-items { flex: 1; overflow-y: auto; padding: 10px; }
+        .cart-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee; }
+
+        .qty-box { display: flex; align-items: center; gap: 5px; }
+        .qty-btn { width: 25px; height: 25px; border-radius: 50%; border: 1px solid #ccc; background: white; cursor: pointer; font-weight: bold; }
+        .qty-input { width: 45px; text-align: center; border: 1px solid #ddd; padding: 3px; border-radius: 4px; }
+
+        .btn { padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; }
+        .btn-success { background: var(--success); }
+        .btn-danger { background: var(--danger); }
+        .btn-primary { background: var(--primary); }
+        .btn-warning { background: var(--warning); color: black;}
+        .btn-block { width: 100%; padding: 15px; font-size: 1.1rem; }
+
+        .stock-warning { color: var(--danger); font-weight: bold; font-size: 0.8rem; }
+    </style>
+</head>
+
+<body>
+
+    <div class="navbar">
+        <div class="nav-controls">
+            <span onclick="window.history.back()">⬅️ Atrás</span>
+            <span onclick="window.history.forward()">➡️ Adelante</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 20px;">
+            <span id="nombre-cajero" style="background: rgba(255,255,255,0.2); padding: 5px 10px; border-radius: 5px;">👤 Cajero: ---</span>
+            <strong>Caja Actual: <span id="caja-total">$0.00</span></strong>
+            <button class="btn btn-danger" onclick="realizarCierreCaja()" style="padding: 5px 10px; font-size: 0.8em; border: 1px solid white;">
+                🔒 Cerrar Caja
+            </button>
+        </div>
+        <div class="nav-controls">
+            <span>➖</span>
+            <span>❌</span>
+        </div>
+    </div>
+
+    <div class="main-container">
+
+        <div class="inventory-section">
+
+            <div class="card" id="card-ofertas" style="display: none; border-left: 5px solid var(--warning); background-color: #fffaf0;">
+                <div class="card-header" style="border-bottom: 1px solid #ffeeba;">
+                    <h3 style="color: #856404; margin: 0;">🔥 OFERTAS POR VENCIMIENTO (Separados)</h3>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Producto</th>
+                            <th>Precio Original</th>
+                            <th>Descuento %</th>
+                            <th>Acción Rápida</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-ofertas"></tbody>
+                </table>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3>➕ Agregar / Actualizar Stock</h3>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="add-nombre" placeholder="Nombre Producto" style="flex: 2; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                        <input type="number" id="add-precio" placeholder="Precio" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                        <input type="number" id="add-stock" placeholder="Cantidad" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                        <input type="date" id="add-vencimiento" title="Fecha Venc. (Opcional)" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                    </div>
+                    <button class="btn btn-primary" onclick="guardarNuevoProducto()" style="width: 100%; padding: 12px; font-size: 1rem; cursor: pointer;">
+                        💾 GUARDAR O ACTUALIZAR PRODUCTO
+                    </button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3>📦 Lista de Productos (Stock Normal)</h3>
+                    <input type="text" id="buscador" placeholder="🔍 Buscar producto..." onkeyup="filtrarProductos()" style="padding: 8px; border-radius: 4px; border: 1px solid #ccc; width: 200px;">
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Producto</th>
+                            <th>Precio</th>
+                            <th>Stock</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-productos"></tbody>
+                </table>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3>📋 Historial de Cierres de Caja</h3>
+                    <button class="btn btn-primary" onclick="cargarHistorialCierres()" style="padding: 5px 10px;">🔄 Actualizar</button>
+                    <button class="btn btn-success" onclick="exportarExcelCierres()" style="padding: 5px 10px; margin-left: 5px;">📊 Exportar Excel</button>
+                </div>
+                <div style="max-height: 200px; overflow-y: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Fecha y Hora</th>
+                                <th>Cajero</th>
+                                <th>Total Gral</th>
+                                <th>Diferencia Caja</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-cierres"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="panel-admin" class="card" style="display: none; border-left: 4px solid var(--danger);">
+                <div class="card-header">
+                    <h3 style="color: var(--danger); margin: 0;">👑 Panel de Dueño: Empleados</h3>
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <input type="text" id="nuevo-emp-nombre" placeholder="Nombre" style="flex: 2; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                    <input type="text" id="nuevo-emp-pin" placeholder="PIN (4 núm)" maxlength="4" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                    <select id="nuevo-emp-rol" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                        <option value="vendedor">Vendedor</option>
+                        <option value="admin">Administrador</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="agregarEmpleado()">➕ Agregar</button>
+                </div>
+                <table style="margin-top: 15px;">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Rol</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-empleados"></tbody>
+                </table>
+            </div>
+
+        </div>
+        <div class="cart-section">
+            <div class="card-header" style="padding: 15px; margin-bottom: 0;">
+                <h3 style="margin: 0;">🛒 Ticket de Venta</h3>
+            </div>
+            <div class="cart-items" id="cart-items"></div>
+            <div style="padding: 15px; border-top: 2px solid #eee;">
+                <div style="display:flex; justify-content: space-between; font-size: 1.3rem; margin-bottom: 10px;">
+                    <strong>TOTAL:</strong>
+                    <strong id="cart-total">$0.00</strong>
+                </div>
+                <select id="metodo-pago" style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ccc;">
+                    <option value="EFECTIVO">Efectivo</option>
+                    <option value="DEBITO">Débito</option>
+                    <option value="TRANSFERENCIA">Transferencia</option>
+                </select>
+                <button class="btn btn-success btn-block" onclick="enviarVenta()">✅ CONFIRMAR VENTA</button>
+                <button class="btn btn-danger btn-block" style="margin-top:5px; padding: 8px;" onclick="cancelarVenta()">❌ Cancelar Venta</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let carrito = [];
+        let usuarioActual = null;
+
+        async function init() {
+            if (!usuarioActual) {
+                const pin = prompt("🔐 Bienvenido al Kiosco.\n\nIngrese su PIN de 4 dígitos para habilitar la caja:");
+                if (!pin) {
+                    document.body.innerHTML = "<h2 style='text-align:center; margin-top: 50px;'>❌ Acceso denegado. F5 para intentar de nuevo.</h2>";
+                    return;
+                }
+
+                try {
+                    const res = await fetch('/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ pin: pin })
+                    });
+
+                    if (res.ok) {
+                        usuarioActual = await res.json();
+                        document.getElementById('nombre-cajero').innerText = `👤 Cajero: ${usuarioActual.nombre}`;
+                        chequearVencimientos();
+                    } else {
+                        alert("❌ PIN Incorrecto. Intente nuevamente.");
+                        location.reload();
+                        return;
+                    }
+                } catch (e) {
+                    alert("❌ Error conectando con el servidor. ¿Está prendido Uvicorn?");
+                    return;
+                }
+            }
+
+            await cargarProductos();
+            await cargarCaja();
+            await cargarHistorialCierres();
+
+            if (usuarioActual && usuarioActual.rol === 'admin') {
+                document.getElementById('panel-admin').style.display = 'block';
+                await cargarEmpleados();
+            }
+        }
+
+        async function cargarCaja() {
+            try {
+                const res = await fetch('/reporte-caja');
+                const data = await res.json();
+                document.getElementById('caja-total').innerText = `$${data.total_recaudado.toFixed(2)}`;
+            } catch (e) { console.error(e); }
+        }
+
+        async function cargarProductos() {
+            try {
+                const res = await fetch('/productos');
+                const prods = await res.json();
+                
+                const tbodyNormal = document.getElementById('tabla-productos');
+                const tbodyOfertas = document.getElementById('tabla-ofertas');
+                
+                tbodyNormal.innerHTML = '';
+                tbodyOfertas.innerHTML = '';
+                let hayOfertas = false;
+
+                // Logica de Separación de Productos
+                const limiteDias = new Date();
+                limiteDias.setDate(new Date().getDate() + 10);
+                limiteDias.setHours(23, 59, 59);
+
+                prods.forEach(p => {
+                    const sinStock = p.stock <= 0;
+                    let esOferta = false;
+
+                    // Verificamos si vence pronto
+                    if (p.fecha_vencimiento && !sinStock) {
+                        const fechaVenc = new Date(p.fecha_vencimiento + "T12:00:00"); 
+                        if (fechaVenc <= limiteDias) {
+                            esOferta = true;
+                            hayOfertas = true;
+                        }
+                    }
+
+                    if (esOferta) {
+                        // Lo mandamos a la tabla de arriba con descuento y el botón de Eliminar
+                        tbodyOfertas.innerHTML += `
+                            <tr>
+                                <td><strong>${p.nombre}</strong><br><small style="color:#856404;">Vence: ${p.fecha_vencimiento}</small></td>
+                                <td>$${p.precio}</td>
+                                <td>
+                                    <input type="number" id="desc-${p.id}" value="20" min="0" max="100" style="width: 50px; padding: 5px; border:1px solid #ccc; border-radius:4px;"> <b>%</b>
+                                </td>
+                                <td style="display: flex; gap: 5px; align-items: center;">
+                                    <button class="btn btn-warning" style="padding: 5px 10px; border: 1px solid #d39e00;" onclick='venderOferta(${JSON.stringify(p)})'>🏷️ Vender</button>
+                                    <button class="btn btn-danger" style="padding: 5px 8px;" onclick="eliminarProductoBD(${p.id})">🗑️</button>
+                                </td>
+                            </tr>`;
+                    } else {
+                        // Lo mandamos a la tabla normal de abajo
+                        tbodyNormal.innerHTML += `
+                            <tr>
+                                <td>${p.nombre}</td>
+                                <td>$${p.precio}</td>
+                                <td>${sinStock ? '<span class="stock-warning">SIN STOCK</span>' : p.stock}</td>
+                                <td>
+                                    <button class="btn btn-primary" ${sinStock ? 'disabled' : ''} onclick='agregarAlCarrito(${JSON.stringify(p)})'>Seleccionar</button>
+                                    <button class="btn btn-danger" style="padding: 5px 8px;" onclick="eliminarProductoBD(${p.id})">🗑️</button>
+                                </td>
+                            </tr>`;
+                    }
+                });
+
+                // Mostramos u ocultamos la caja entera de ofertas según si hay o no
+                document.getElementById('card-ofertas').style.display = hayOfertas ? 'block' : 'none';
+
+            } catch (e) { console.error(e); }
+        }
+
+        function filtrarProductos() {
+            const texto = document.getElementById('buscador').value.toLowerCase();
+            const filas = document.getElementById('tabla-productos').getElementsByTagName('tr');
+            for (let i = 0; i < filas.length; i++) {
+                const nombre = filas[i].getElementsByTagName('td')[0].innerText.toLowerCase();
+                filas[i].style.display = nombre.includes(texto) ? "" : "none";
+            }
+        }
+
+        function venderOferta(p) {
+            // Capturamos el porcentaje que puso el usuario (o el 20 por defecto)
+            const inputDesc = document.getElementById(`desc-${p.id}`).value;
+            const porcentaje = parseFloat(inputDesc) || 0;
+            
+            // Calculamos matemática básica
+            const descuentoEnPesos = p.precio * (porcentaje / 100);
+            const precioFinal = p.precio - descuentoEnPesos;
+
+            // Le modificamos el nombre y el precio para que en el ticket figure distinto
+            const pOferta = {
+                ...p,
+                nombre: `🔥 OFERTA: ${p.nombre}`,
+                precio: precioFinal
+            };
+
+            agregarAlCarrito(pOferta);
+        }
+
+        function agregarAlCarrito(p) {
+            const existente = carrito.find(item => item.id === p.id && item.precio === p.precio);
+            if (existente) {
+                if (existente.cantidad >= p.stock) return alert("No hay más stock disponible");
+                existente.cantidad++;
+            } else {
+                carrito.push({ ...p, cantidad: 1 });
+            }
+            actualizarCarritoUI();
+        }
+
+        function actualizarCarritoUI() {
+            const container = document.getElementById('cart-items');
+            container.innerHTML = '';
+            let total = 0;
+            carrito.forEach(item => {
+                total += item.precio * item.cantidad;
+                container.innerHTML += `
+                    <div class="cart-item">
+                        <div><strong>${item.nombre}</strong><br><small>$${item.precio} c/u</small></div>
+                        <div class="qty-box">
+                            <button class="qty-btn" onclick="cambiarCant(${item.id}, ${item.precio}, -1)">-</button>
+                            <span class="qty-input">${item.cantidad}</span>
+                            <button class="qty-btn" onclick="cambiarCant(${item.id}, ${item.precio}, 1)">+</button>
+                            <span style="cursor:pointer" onclick="quitarDelCarrito(${item.id}, ${item.precio})">🗑️</span>
+                        </div>
+                    </div>`;
+            });
+            document.getElementById('cart-total').innerText = `$${total.toFixed(2)}`;
+        }
+
+        function cambiarCant(id, precio, delta) {
+            const item = carrito.find(i => i.id === id && i.precio === precio);
+            if (item) {
+                const prox = item.cantidad + delta;
+                if (prox > item.stock) return alert("Límite de stock");
+                item.cantidad = prox;
+                if (item.cantidad <= 0) quitarDelCarrito(id, precio);
+                else actualizarCarritoUI();
+            }
+        }
+
+        function quitarDelCarrito(id, precio) {
+            carrito = carrito.filter(i => !(i.id === id && i.precio === precio));
+            actualizarCarritoUI();
+        }
+
+        function cancelarVenta() {
+            if (confirm("¿Cancelar venta?")) { carrito = []; actualizarCarritoUI(); }
+        }
+
+        async function enviarVenta() {
+            if (carrito.length === 0) return alert("Carrito vacío");
+            const res = await fetch('/procesar-venta', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    productos: carrito,
+                    metodo_pago: document.getElementById('metodo-pago').value,
+                    usuario_id: usuarioActual.id
+                })
+            });
+            if (res.ok) { alert("✅ Venta Exitosa"); carrito = []; actualizarCarritoUI(); init(); }
+        }
+
+        async function guardarNuevoProducto() {
+            const nombre = document.getElementById('add-nombre').value;
+            const precioInput = document.getElementById('add-precio').value;
+            const stock = document.getElementById('add-stock').value;
+            const fechaVenc = document.getElementById('add-vencimiento').value; 
+
+            if (!nombre || !stock) return alert("Completar nombre y cantidad");
+
+            const res = await fetch('/productos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    nombre: nombre, 
+                    precio: precioInput ? parseFloat(precioInput) : 0, 
+                    stock: parseInt(stock),
+                    fecha_vencimiento: fechaVenc !== "" ? fechaVenc : null 
+                })
+            });
+            if (res.ok) {
+                alert("Producto guardado");
+                document.getElementById('add-nombre').value = ''; 
+                document.getElementById('add-precio').value = ''; 
+                document.getElementById('add-stock').value = '';
+                document.getElementById('add-vencimiento').value = ''; 
+                init();
+            }
+        }
+
+        async function eliminarProductoBD(id) {
+            if (confirm("¿Eliminar definitivamente?")) {
+                const res = await fetch(`/productos/${id}`, { method: 'DELETE' });
+                if (res.ok) { alert("Eliminado"); init(); }
+                else { alert("No se puede eliminar un producto con ventas"); }
+            }
+        }
+
+        async function realizarCierreCaja() {
+            const plataFisicaStr = prompt(`Cierre de turno de ${usuarioActual.nombre}.\n\n💵 ¿Cuánta plata física (billetes) tenés exactamente en el cajón?`);
+            if (plataFisicaStr === null) return; 
+
+            const plataFisica = parseFloat(plataFisicaStr);
+            if (isNaN(plataFisica) || plataFisica < 0) return alert("❌ Por favor, ingresá un número válido para el efectivo.");
+
+            try {
+                const res = await fetch('/cerrar-caja', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ usuario_id: usuarioActual.id, efectivo_real: plataFisica })
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    const otrosMedios = data.monto - data.esperado;
+                    let msjDiferencia = "";
+                    if (data.diferencia === 0) msjDiferencia = "✅ CAJA PERFECTA. ¡Excelente!";
+                    else if (data.diferencia > 0) msjDiferencia = `🟢 SOBRAN $${data.diferencia.toFixed(2)}`;
+                    else msjDiferencia = `🔴 FALTAN $${Math.abs(data.diferencia).toFixed(2)}`;
+
+                    alert(`📊 RESUMEN DE CIERRE\n\n👤 Cajero: ${usuarioActual.nombre}\n📦 Ventas en este turno: ${data.ventas}\n\n💰 RECAUDACIÓN TOTAL: $${data.monto.toFixed(2)}\n💳 Pagos Digitales (Transf/Débito): $${otrosMedios.toFixed(2)}\n💵 Efectivo en sistema: $${data.esperado.toFixed(2)}\n\n✋ Efectivo que contaste: $${data.real.toFixed(2)}\n\n${msjDiferencia}`);
+
+                    carrito = [];                
+                    actualizarCarritoUI();    
+                    const lblTotalCaja = document.getElementById('caja-total');
+                    if (lblTotalCaja) lblTotalCaja.innerText = "$0.00";
+                    init();
+                } else { alert("⚠️ Error: " + data.detail); }
+            } catch (e) { alert("Error de conexión"); }
+        }
+
+        async function cargarHistorialCierres() {
+            try {
+                const res = await fetch('/historial-cierres');
+                const cierres = await res.json();
+                const tbody = document.getElementById('tabla-cierres');
+                if (!tbody) return;
+
+                tbody.innerHTML = '';
+                if (cierres.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No hay cierres registrados</td></tr>';
+                    return;
+                }
+
+                cierres.forEach(c => {
+                    const colorDif = c.diferencia >= 0 ? 'var(--success)' : 'var(--danger)';
+                    const signo = c.diferencia > 0 ? '+' : '';
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>#${c.id}</td>
+                            <td>${c.fecha}</td>
+                            <td><strong>${c.usuario}</strong></td>
+                            <td>$${c.monto.toFixed(2)}</td>
+                            <td style="display: flex; justify-content: space-between; align-items: center; min-width: 180px;">
+                                <span style="color: ${colorDif}; font-weight: bold;">${signo}$${c.diferencia.toFixed(2)}</span>
+                                <button class="btn btn-primary" style="padding: 4px 10px; font-size: 0.7rem; border-radius: 4px;" onclick="verDetallesCierre(${c.id})">🔍 DETALLE</button>
+                            </td>
+                        </tr>`;
+                });
+            } catch (e) { console.error("Error al cargar historial:", e); }
+        }
+
+        async function cargarEmpleados() {
+            const res = await fetch('/usuarios');
+            const emps = await res.json();
+            const tbody = document.getElementById('tabla-empleados');
+            tbody.innerHTML = '';
+            emps.forEach(e => {
+                const btnAccion = e.rol === 'admin'
+                    ? '<span style="color: var(--secondary); font-weight: bold;">🛡️ Intocable</span>'
+                    : `<button class="btn btn-danger" style="padding: 2px 8px; font-size: 0.8em;" onclick="eliminarEmpleado(${e.id})">🗑️</button>`;
+
+                tbody.innerHTML += `<tr>
+                    <td>${e.nombre}</td>
+                    <td><span style="background: #eee; padding: 3px 8px; border-radius: 10px; font-size: 0.8em;">${e.rol.toUpperCase()}</span></td>
+                    <td>${btnAccion}</td>
+                </tr>`;
+            });
+        }
+
+        async function agregarEmpleado() {
+            const nombre = document.getElementById('nuevo-emp-nombre').value;
+            const pin = document.getElementById('nuevo-emp-pin').value;
+            const rol = document.getElementById('nuevo-emp-rol').value;
+
+            if (!nombre || pin.length !== 4) return alert("Completá el nombre y un PIN de 4 números.");
+
+            const res = await fetch('/usuarios', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nombre, pin, rol })
+            });
+
+            if (res.ok) {
+                alert("✅ Empleado agregado");
+                document.getElementById('nuevo-emp-nombre').value = '';
+                document.getElementById('nuevo-emp-pin').value = '';
+                cargarEmpleados();
+            } else {
+                const error = await res.json();
+                alert("❌ Error: " + error.detail);
+            }
+        }
+
+        async function eliminarEmpleado(id) {
+            if (id === usuarioActual.id) return alert("❌ No podés eliminar tu propio usuario mientras estás en el sistema.");
+            if (confirm("¿Estás seguro de que querés eliminar a este empleado del sistema?")) {
+                const res = await fetch(`/usuarios/${id}`, { method: 'DELETE' });
+                if (res.ok) { alert("✅ Empleado eliminado"); cargarEmpleados(); } 
+                else { const data = await res.json(); alert("⚠️ " + data.detail); }
+            }
+        }
+
+        init();
+
+        async function verDetallesCierre(id) {
+            try {
+                const res = await fetch(`/cierre-detalles/${id}`);
+                const ventas = await res.json();
+                const tbody = document.querySelector('#tabla-detalles-ventas tbody');
+                tbody.innerHTML = '';
+
+                if (ventas.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No hay detalles registrados para este cierre antiguo.</td></tr>';
+                } else {
+                    ventas.forEach(v => {
+                        tbody.innerHTML += `<tr>
+                            <td>${v.fecha} hs</td>
+                            <td><i style="color:var(--secondary)">${v.items}</i></td>
+                            <td><small>${v.pago}</small></td>
+                            <td style="font-weight:bold;">$${v.total.toFixed(2)}</td>
+                        </tr>`;
+                    });
+                }
+                document.getElementById('modal-detalles').style.display = 'flex';
+            } catch (e) { alert("Error al cargar los detalles."); }
+            const btnExportar = document.getElementById('btn-exportar-detalle');
+            btnExportar.onclick = () => exportarExcelDetalleTurno(id);
+        }
+
+        function exportarExcelCierres() {
+            const tabla = document.getElementById('tabla-cierres');
+            let csv = "ID;Fecha y Hora;Cajero;Total Recaudado;Diferencia\n";
+            for (let i = 0; i < tabla.rows.length; i++) {
+                let fila = tabla.rows[i];
+                let datos = [];
+                for (let j = 0; j < fila.cells.length; j++) {
+                    let texto = fila.cells[j].innerText;
+                    let limpio = texto.replace("🔍 DETALLE", "").replace("🔍 Detalle", "").replace("$", "").trim();
+                    datos.push(limpio);
+                }
+                csv += datos.join(";") + "\n";
+            }
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", "reporte_cierres_kiosco.csv");
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function exportarExcelDetalleTurno(idCierre) {
+            const tabla = document.getElementById('tabla-detalles-ventas');
+            let csv = `Detalle de Ventas - Cierre #${idCierre}\n`;
+            csv += "Hora;Productos;Metodo Pago;Total\n"; 
+            for (let i = 0; i < tabla.rows.length; i++) {
+                let fila = tabla.rows[i];
+                if (fila.parentElement.tagName === 'THEAD') continue; 
+                let datos = [
+                    fila.cells[0].innerText.replace(" hs", ""), 
+                    fila.cells[1].innerText.replace(/,/g, " -"), 
+                    fila.cells[2].innerText, 
+                    fila.cells[3].innerText.replace("$", "") 
+                ];
+                csv += datos.join(";") + "\n";
+            }
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `detalle_cierre_${idCierre}.csv`);
+            link.click();
+        }
+
+        async function chequearVencimientos() {
+            try {
+                const res = await fetch('/alertas-vencimiento');
+                const alertas = await res.json();
+                
+                if (alertas.length > 0) {
+                    let msj = "⚠️ ATENCIÓN: PRODUCTOS PRÓXIMOS A VENCER ⚠️\n\n";
+                    alertas.forEach(prod => { msj += `🔴 ${prod.nombre} - Vence el: ${prod.fecha}\n`; });
+                    msj += "\n¡Por favor, revisá el stock y ponelos adelante!";
+                    alert(msj);
+                }
+            } catch (e) { console.error("Error al chequear vencimientos", e); }
+        }
+    </script>
+    <div id="modal-detalles" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9999; justify-content:center; align-items:center;">
+        <div class="card" style="width:90%; max-width:900px; max-height:90vh; overflow-y:auto; padding:30px; border-radius:15px; border-top: 5px solid var(--primary);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2 style="margin:0;">📝 Auditoría de Ventas del Cierre</h2>
+                <div style="display:flex; gap:10px;">
+                    <button id="btn-exportar-detalle" class="btn btn-success" style="padding: 5px 15px;">📊 Bajar Excel de este Turno</button>
+                    <button onclick="document.getElementById('modal-detalles').style.display='none'" class="btn btn-danger" style="border-radius:50%; width:40px; height:40px; padding:0;">X</button>
+                </div>
+            </div>
+            <table id="tabla-detalles-ventas">
+                <thead style="background:var(--light);">
+                    <tr>
+                        <th>Hora</th>
+                        <th>Productos (Cantidad)</th>
+                        <th>Método Pago</th>
+                        <th>Subtotal</th>
+                    </tr>
+                </thead>
+                <tbody style="font-size: 0.95rem;"></tbody>
+            </table>
+            <div id="resumen-final-modal" style="margin-top:25px; padding:15px; background:#f8f9fa; border-radius:8px; border:1px solid #ddd;"></div>
+        </div>
+    </div>
+</body>
+</html>
